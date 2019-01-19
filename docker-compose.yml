@@ -1,0 +1,96 @@
+version: "3"
+
+services:
+  zoo1:
+    image: zookeeper
+    restart: always
+    hostname: zoo1
+    ports:
+      - "2181:2181"
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=zoo1:2888:3888 server.2=zoo2:2888:3888 server.3=zoo3:2888:3888
+
+  zoo2:
+    image: zookeeper
+    restart: always
+    hostname: zoo2
+    ports:
+      - "2182:2181"
+    environment:
+      ZOO_MY_ID: 2
+      ZOO_SERVERS: server.1=zoo1:2888:3888 server.2=zoo2:2888:3888 server.3=zoo3:2888:3888
+
+  zoo3:
+    image: zookeeper
+    restart: always
+    hostname: zoo3
+    ports:
+      - "2183:2181"
+    environment:
+      ZOO_MY_ID: 3
+      ZOO_SERVERS: server.1=zoo1:2888:3888 server.2=zoo2:2888:3888 server.3=zoo3:2888:3888
+
+  zkui:
+    image: riveryang/zkui
+    restart: always
+    hostname: zkui
+    ports:
+      - "4040:9090"
+    environment:
+      ZK_SERVER: zoo1:2181,zoo2:2181,zoo3:2181
+
+  mesos-master:
+    image: mesosphere/mesos-master:1.7.0
+    restart: always
+    hostname: 192.168.50.212
+    network_mode: "host"
+    environment:
+      - MESOS_PORT=5050
+      - MESOS_ZK=zk://localhost:2181,localhost:2182,localhost:2183/mesos
+      - MESOS_QUORUM=1
+      - MESOS_REGISTRY=in_memory
+      - MESOS_LOG_DIR=/var/log/mesos
+      - MESOS_WORK_DIR=/var/tmp/mesos
+    volumes:
+      - ./mesos-master/log:/var/log/mesos
+      - ./mesos-master/tmp:/var/tmp/mesos
+    command: ["--no-hostname_lookup", "--ip=192.168.50.212", "--cluster=spider"]
+
+  mesos-slave:
+    image: mesosphere/mesos-slave:1.7.0
+    restart: always
+    hostname: 192.168.50.212
+    network_mode: "host"
+    environment:
+      - MESOS_PORT=5051
+      - MESOS_MASTER=zk://localhost:2181,localhost:2182,localhost:2183/mesos
+      - MESOS_SWITCH_USER=0
+      - MESOS_CONTAINERIZERS=docker,mesos
+      - MESOS_LOG_DIR=/var/log/mesos
+      - MESOS_WORK_DIR=/var/tmp/mesos
+    volumes:
+      - ./mesos-slave/log:/var/log/mesos
+      - ./mesos-slave/tmp:/var/tmp/mesos
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /sys/fs/cgroup:/cgroup
+      - /sys:/sys
+      - /usr/bin/docker:/usr/local/bin/docker
+    command: ["--no-hostname_lookup", "--ip=192.168.50.212", "--no-systemd_enable_support"]
+
+  marathon:
+    image: mesosphere/marathon:v1.8.667
+    restart: always
+    hostname: 192.168.50.212
+    network_mode: "host"
+    command: ["--master", "zk://localhost:2181,localhost:2182,localhost:2183/mesos", "--zk", "zk://localhost:2181,localhost:2182,localhost:2183/marathon"]
+
+  marathon-lb:
+    image: mesosphere/marathon-lb
+    restart: always
+    hostname: 192.168.50.212
+    network_mode: "host"
+    environment:
+      - PORTS=9090
+    command: ["sse", "--marathon", "http://localhost:8080", "--group", "external", "--health-check", "--dont-bind-http-https"]
+

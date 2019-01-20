@@ -62,6 +62,8 @@ services:
     restart: always
     hostname: 192.168.50.212
     network_mode: "host"
+    pid: "host"
+    privileged: true
     environment:
       - MESOS_PORT=5051
       - MESOS_MASTER=zk://localhost:2181,localhost:2182,localhost:2183/mesos
@@ -79,10 +81,11 @@ services:
     command: ["--no-hostname_lookup", "--ip=192.168.50.212", "--no-systemd_enable_support"]
 
   marathon:
-    image: mesosphere/marathon:v1.8.667
+    image: mesosphere/marathon:v1.7.188
     restart: always
     hostname: 192.168.50.212
     network_mode: "host"
+    privileged: true
     command: ["--master", "zk://localhost:2181,localhost:2182,localhost:2183/mesos", "--zk", "zk://localhost:2181,localhost:2182,localhost:2183/marathon"]
 
   marathon-lb:
@@ -90,7 +93,16 @@ services:
     restart: always
     hostname: 192.168.50.212
     network_mode: "host"
+    privileged: true
+    ulimits:
+      nofile:
+        soft: 100035
+        hard: 100035
+    labels:
+      - HAPROXY_SSL_CERT
     environment:
       - PORTS=9090
-    command: ["sse", "--marathon", "http://localhost:8080", "--group", "external", "--health-check", "--dont-bind-http-https"]
+    volumes:
+      - ./marathon-lb/ssl/kiba.vip.pem:/etc/ssl/kiba.vip.pem
+    command: ["sse", "--marathon", "http://localhost:8080", "--group", "external", "--health-check", "--ssl-certs", "/etc/ssl/kiba.vip.pem"]
 
